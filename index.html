@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bloco de Notas</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #f5f5f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .auth-container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            width: 350px;
+            text-align: center;
+        }
+        .auth-container h2 {
+            margin-top: 0;
+            color: #6200ee;
+        }
+        .auth-container input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .auth-container button {
+            width: 100%;
+            padding: 12px;
+            background: #6200ee;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        .auth-container button:hover {
+            opacity: 0.9;
+        }
+        .auth-switch {
+            margin-top: 20px;
+            color: #666;
+        }
+        .auth-switch a {
+            color: #6200ee;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .app-container {
+            display: none;
+            width: 100%;
+            height: 100vh;
+        }
+        .sidebar {
+            width: 250px;
+            background: white;
+            border-right: 1px solid #ddd;
+            overflow-y: auto;
+            padding: 15px;
+        }
+        .sidebar h3 {
+            margin-top: 0;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        .texto-item {
+            padding: 10px;
+            margin: 5px 0;
+            cursor: pointer;
+            border-radius: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .texto-item:hover {
+            background: #f0f0f0;
+        }
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .toolbar {
+            padding: 10px 15px;
+            background: #6200ee;
+            color: white;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .toolbar button {
+            background: white;
+            color: #6200ee;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .toolbar select {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+        .editor {
+            flex: 1;
+            padding: 20px;
+        }
+        textarea {
+            width: 100%;
+            height: 100%;
+            border: none;
+            resize: none;
+            font-size: 16px;
+            padding: 10px;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+        .user-info {
+            margin-left: auto;
+            color: white;
+            margin-right: 15px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Tela de Login/Cadastro -->
+    <div id="auth-page">
+        <div class="auth-container" id="login-container">
+            <h2>Login</h2>
+            <input type="text" id="login-user" placeholder="Usuário">
+            <input type="password" id="login-password" placeholder="Senha">
+            <button id="login-btn">Entrar</button>
+            <div class="auth-switch">
+                Não tem conta? <a id="show-register">Criar conta</a>
+            </div>
+        </div>
+
+        <div class="auth-container" id="register-container" style="display: none;">
+            <h2>Criar Conta</h2>
+            <input type="text" id="register-user" placeholder="Usuário">
+            <input type="password" id="register-password" placeholder="Senha">
+            <input type="password" id="register-confirm" placeholder="Confirmar Senha">
+            <button id="register-btn">Criar Conta</button>
+            <div class="auth-switch">
+                Já tem conta? <a id="show-login">Fazer login</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Aplicativo Bloco de Notas -->
+    <div class="app-container" id="app-container">
+        <div class="sidebar">
+            <h3>Histórico</h3>
+            <div id="historico-lista"></div>
+        </div>
+        <div class="main-content">
+            <div class="toolbar">
+                <button id="novo-texto">Novo Texto</button>
+                <button id="salvar-texto">Salvar</button>
+                <select id="exportar-formato">
+                    <option value="txt">TXT</option>
+                    <option value="pdf">PDF</option>
+                    <option value="html">HTML</option>
+                    <option value="xml">XML</option>
+                </select>
+                <button id="exportar-texto">Exportar</button>
+                <div class="user-info" id="user-info"></div>
+                <button id="logout-btn">Sair</button>
+            </div>
+            <div class="editor">
+                <textarea id="editor-texto" placeholder="Digite seu texto aqui..."></textarea>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuração
+        const { jsPDF } = window.jspdf;
+        
+        // Dados do aplicativo
+        const appData = {
+            currentUser: null,
+            textos: [],
+            currentTextoId: null
+        };
+
+        // Elementos do DOM
+        const elements = {
+            // Autenticação
+            authPage: document.getElementById('auth-page'),
+            loginContainer: document.getElementById('login-container'),
+            registerContainer: document.getElementById('register-container'),
+            loginUser: document.getElementById('login-user'),
+            loginPassword: document.getElementById('login-password'),
+            registerUser: document.getElementById('register-user'),
+            registerPassword: document.getElementById('register-password'),
+            registerConfirm: document.getElementById('register-confirm'),
+            loginBtn: document.getElementById('login-btn'),
+            registerBtn: document.getElementById('register-btn'),
+            showRegister: document.getElementById('show-register'),
+            showLogin: document.getElementById('show-login'),
+            
+            // Aplicativo
+            appContainer: document.getElementById('app-container'),
+            editor: document.getElementById('editor-texto'),
+            historicoLista: document.getElementById('historico-lista'),
+            novoTextoBtn: document.getElementById('novo-texto'),
+            salvarTextoBtn: document.getElementById('salvar-texto'),
+            exportarTextoBtn: document.getElementById('exportar-texto'),
+            exportarFormato: document.getElementById('exportar-formato'),
+            userInfo: document.getElementById('user-info'),
+            logoutBtn: document.getElementById('logout-btn')
+        };
+
+        // Inicialização
+        function init() {
+            // Carregar usuário logado (se existir)
+            const savedUser = localStorage.getItem('currentUser');
+            if (savedUser) {
+                appData.currentUser = JSON.parse(savedUser);
+                showApp();
+            }
+
+            // Configurar eventos
+            setupEventListeners();
+        }
+
+        // Configurar eventos
+        function setupEventListeners() {
+            // Autenticação
+            elements.loginBtn.addEventListener('click', login);
+            elements.registerBtn.addEventListener('click', register);
+            elements.showRegister.addEventListener('click', () => {
+                elements.loginContainer.style.display = 'none';
+                elements.registerContainer.style.display = 'block';
+            });
+            elements.showLogin.addEventListener('click', () => {
+                elements.registerContainer.style.display = 'none';
+                elements.loginContainer.style.display = 'block';
+            });
+            
+            // Aplicativo
+            elements.novoTextoBtn.addEventListener('click', novoTexto);
+            elements.salvarTextoBtn.addEventListener('click', salvarTexto);
+            elements.exportarTextoBtn.addEventListener('click', exportarTexto);
+            elements.logoutBtn.addEventListener('click', logout);
+        }
+
+        // Funções de autenticação
+        function login() {
+            const username = elements.loginUser.value.trim();
+            const password = elements.loginPassword.value.trim();
+            
+            if (!username || !password) {
+                alert('Preencha usuário e senha!');
+                return;
+            }
+            
+            const users = JSON.parse(localStorage.getItem('users')) || [];
+            const user = users.find(u => u.username === username && u.password === password);
+            
+            if (user) {
+                appData.currentUser = user;
+                localStorage.setItem('currentUser', JSON.stringify(user));
+                
+                // Carregar textos do usuário
+                const userTextos = JSON.parse(localStorage.getItem('userTextos')) || {};
+                appData.textos = userTextos[username] || [];
+                
+                showApp();
+            } else {
+                alert('Usuário ou senha incorretos!');
+            }
+        }
+
+        function register() {
+            const username = elements.registerUser.value.trim();
+            const password = elements.registerPassword.value.trim();
+            const confirm = elements.registerConfirm.value.trim();
+            
+            if (!username || !password) {
+                alert('Preencha todos os campos!');
+                return;
+            }
+            
+            if (password !== confirm) {
+                alert('As senhas não coincidem!');
+                return;
+            }
+            
+            if (password.length < 3) {
+                alert('A senha deve ter pelo menos 3 caracteres!');
+                return;
+            }
+            
+            let users = JSON.parse(localStorage.getItem('users')) || [];
+            
+            if (users.some(u => u.username === username)) {
+                alert('Usuário já existe!');
+                return;
+            }
+            
+            const newUser = { username, password };
+            users.push(newUser);
+            localStorage.setItem('users', JSON.stringify(users));
+            
+            // Criar espaço para os textos do novo usuário
+            let userTextos = JSON.parse(localStorage.getItem('userTextos')) || {};
+            userTextos[username] = [];
+            localStorage.setItem('userTextos', JSON.stringify(userTextos));
+            
+            alert('Conta criada com sucesso! Faça login.');
+            elements.registerContainer.style.display = 'none';
+            elements.loginContainer.style.display = 'block';
+            elements.loginUser.value = username;
+            elements.loginPassword.value = '';
+        }
+
+        function logout() {
+            appData.currentUser = null;
+            appData.textos = [];
+            appData.currentTextoId = null;
+            localStorage.removeItem('currentUser');
+            elements.appContainer.style.display = 'none';
+            elements.authPage.style.display = 'block';
+            elements.loginContainer.style.display = 'block';
+            elements.registerContainer.style.display = 'none';
+            elements.editor.value = '';
+        }
+
+        // Mostrar aplicativo
+        function showApp() {
+            elements.authPage.style.display = 'none';
+            elements.appContainer.style.display = 'flex';
+            elements.userInfo.textContent = appData.currentUser.username;
+            loadTextos();
+        }
+
+        // Funções do bloco de notas
+        function loadTextos() {
+            elements.historicoLista.innerHTML = '';
+            
+            if (appData.textos.length === 0) {
+                const emptyMsg = document.createElement('div');
+                emptyMsg.textContent = 'Nenhum texto salvo';
+                emptyMsg.style.padding = '10px';
+                emptyMsg.style.color = '#666';
+                elements.historicoLista.appendChild(emptyMsg);
+                return;
+            }
+            
+            appData.textos.forEach(texto => {
+                const item = document.createElement('div');
+                item.className = 'texto-item';
+                item.textContent = texto.titulo || 'Sem título';
+                item.addEventListener('click', () => carregarTexto(texto.id));
+                elements.historicoLista.appendChild(item);
+            });
+        }
+
+        function novoTexto() {
+            appData.currentTextoId = null;
+            elements.editor.value = '';
+        }
+
+        function salvarTexto() {
+            const conteudo = elements.editor.value.trim();
+            if (!conteudo) {
+                alert('Digite algo para salvar!');
+                return;
+            }
+            
+            const agora = new Date();
+            const titulo = `Texto ${agora.toLocaleString()}`;
+            
+            if (appData.currentTextoId) {
+                // Atualizar texto existente
+                const index = appData.textos.findIndex(t => t.id === appData.currentTextoId);
+                if (index !== -1) {
+                    appData.textos[index] = {
+                        ...appData.textos[index],
+                        conteudo,
+                        titulo,
+                        atualizadoEm: agora.toISOString()
+                    };
+                }
+            } else {
+                // Criar novo texto
+                const novoTexto = {
+                    id: Date.now().toString(),
+                    titulo,
+                    conteudo,
+                    criadoEm: agora.toISOString(),
+                    atualizadoEm: agora.toISOString()
+                };
+                appData.textos.unshift(novoTexto);
+                appData.currentTextoId = novoTexto.id;
+            }
+            
+            // Salvar textos do usuário
+            const userTextos = JSON.parse(localStorage.getItem('userTextos')) || {};
+            userTextos[appData.currentUser.username] = appData.textos;
+            localStorage.setItem('userTextos', JSON.stringify(userTextos));
+            
+            loadTextos();
+        }
+
+        function carregarTexto(id) {
+            const texto = appData.textos.find(t => t.id === id);
+            if (texto) {
+                appData.currentTextoId = id;
+                elements.editor.value = texto.conteudo;
+            }
+        }
+
+        function exportarTexto() {
+            const conteudo = elements.editor.value.trim();
+            if (!conteudo) {
+                alert('Nada para exportar!');
+                return;
+            }
+            
+            const formato = elements.exportarFormato.value;
+            const nomeArquivo = `texto_${new Date().toISOString().slice(0, 10)}`;
+            
+            if (formato === 'txt') exportarComoTXT(conteudo, nomeArquivo);
+            else if (formato === 'pdf') exportarComoPDF(conteudo, nomeArquivo);
+            else if (formato === 'html') exportarComoHTML(conteudo, nomeArquivo);
+            else if (formato === 'xml') exportarComoXML(conteudo, nomeArquivo);
+        }
+
+        // Funções de exportação
+        function exportarComoTXT(conteudo, nomeArquivo) {
+            const blob = new Blob([conteudo], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${nomeArquivo}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function exportarComoPDF(conteudo, nomeArquivo) {
+            const doc = new jsPDF();
+            const lines = conteudo.split('\n');
+            let y = 10;
+            
+            lines.forEach(line => {
+                doc.text(line, 10, y);
+                y += 7;
+                if (y > 280) {
+                    doc.addPage();
+                    y = 10;
+                }
+            });
+            
+            doc.save(`${nomeArquivo}.pdf`);
+        }
+
+        function exportarComoHTML(conteudo, nomeArquivo) {
+            const html = `<!DOCTYPE html>
+<html>
+<head>
+    <title>${nomeArquivo}</title>
+    <meta charset="UTF-8">
+</head>
+<body>
+    <pre>${conteudo}</pre>
+</body>
+</html>`;
+            
+            const blob = new Blob([html], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${nomeArquivo}.html`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function exportarComoXML(conteudo, nomeArquivo) {
+            const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<texto>
+    <conteudo><![CDATA[${conteudo}]]></conteudo>
+    <data>${new Date().toISOString()}</data>
+</texto>`;
+            
+            const blob = new Blob([xml], { type: 'application/xml' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${nomeArquivo}.xml`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Iniciar aplicativo
+        init();
+    </script>
+</body>
+</html>
